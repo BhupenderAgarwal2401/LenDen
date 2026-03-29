@@ -4,6 +4,7 @@
   "version": "4.2.0",
   "description": "LenDen PWA smoke tests",
   "scripts": {
+    "preinstall": "node -e \"const r=(process.env.npm_config_registry||'https://registry.npmjs.org/').trim();let h='';try{h=new URL(r).hostname}catch(e){console.error('Invalid npm registry URL:',r);process.exit(1)}if(h!=='registry.npmjs.org'){console.error('Blocked npm registry: '+r+'. Use https://registry.npmjs.org/ for this personal project.');process.exit(1)}\"",
     "test:smoke": "playwright test -c playwright.config.js",
     "test:smoke:headed": "playwright test -c playwright.config.js --headed",
     "test:smoke:debug": "PWDEBUG=1 playwright test -c playwright.config.js"

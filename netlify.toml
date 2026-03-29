@@ -1,2 +1,5 @@
 [build]
   publish = "."
+
+[build.environment]
+  NPM_CONFIG_REGISTRY = "https://registry.npmjs.org/"
