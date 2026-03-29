@@ -18,12 +18,18 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: npm install --package-lock=false
 
       - name: Install Playwright browser
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
         run: npx playwright install --with-deps chromium
 
       - name: Run smoke tests
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
         run: npm run test:smoke
 
       - name: Upload Playwright report

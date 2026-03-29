@@ -1,11 +1,2 @@
 [build]
   publish = "."
-
-[context.deploy-preview]
-  command = "npm install && npx playwright install --with-deps chromium && npm run test:smoke"
-
-[context.branch-deploy]
-  command = "npm install && npx playwright install --with-deps chromium && npm run test:smoke"
-
-[context.production]
-  command = "npm install && npx playwright install --with-deps chromium && npm run test:smoke"
