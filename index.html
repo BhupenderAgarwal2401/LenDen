@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#0b0f1a"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>LenDen v4</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/styles.css"/>
+</head>
+<body>
+
+<!-- ===== PIN SCREEN ===== -->
+<div id="pin-screen">
+  <div class="pin-logo">LenDen</div>
+  <div class="pin-tagline">Track · Settle · Relax</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="d0"></div><div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div><div class="pin-dot" id="d3"></div>
+  </div>
+  <div id="pin-error" class="pin-error"></div>
+  <div id="pin-hint" class="pin-hint"></div>
+  <button id="bio-unlock-btn" class="btn btn-ghost btn-sm" style="display:none;width:252px" onclick="unlockWithBiometric()">🔓 Unlock with Fingerprint / Face ID</button>
+  <div class="pin-pad">
+    <button class="pin-btn" onclick="pinPress('1')">1</button>
+    <button class="pin-btn" onclick="pinPress('2')">2</button>
+    <button class="pin-btn" onclick="pinPress('3')">3</button>
+    <button class="pin-btn" onclick="pinPress('4')">4</button>
+    <button class="pin-btn" onclick="pinPress('5')">5</button>
+    <button class="pin-btn" onclick="pinPress('6')">6</button>
+    <button class="pin-btn" onclick="pinPress('7')">7</button>
+    <button class="pin-btn" onclick="pinPress('8')">8</button>
+    <button class="pin-btn" onclick="pinPress('9')">9</button>
+    <button class="pin-btn" style="font-size:13px;color:var(--text3)">🔒</button>
+    <button class="pin-btn" onclick="pinPress('0')">0</button>
+    <button class="pin-btn" style="font-size:16px" onclick="pinPress('del')">⌫</button>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-logo">LenDen</div>
+    <div id="topbar-title" class="topbar-title"></div>
+    <div class="topbar-actions">
+      <div class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</div>
+      <div class="icon-btn" onclick="showPage('settings')">⚙️</div>
+    </div>
+  </div>
+  <div id="update-banner-slot"></div>
+
+  <div class="pages" id="pages-container">
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="content">
+        <div id="install-banner-slot"></div>
+        <div class="sum-grid">
+          <div class="sum-card" onclick="showPage('lending')"><div class="sum-label">To Receive</div><div class="sum-val red mono" id="d-recv">₹0</div><div class="sum-sub" id="d-recv-c">0 people</div></div>
+          <div class="sum-card" onclick="showPage('borrowing')"><div class="sum-label">I Owe Others</div><div class="sum-val purple mono" id="d-owe">₹0</div><div class="sum-sub" id="d-owe-c">0 people</div></div>
+        </div>
+        <div class="sum-grid">
+          <div class="sum-card" onclick="showPage('reports')"><div class="sum-label">Total Lent</div><div class="sum-val mono" id="d-lent">₹0</div><div class="sum-sub">All time</div></div>
+          <div class="sum-card" onclick="showPage('reports')"><div class="sum-label">Discount Given</div><div class="sum-val amber mono" id="d-disc">₹0</div><div class="sum-sub">Absorbed by you</div></div>
+        </div>
+        <div class="sec-title">Recent Activity</div>
+        <div id="dash-recent"></div>
+      </div>
+    </div>
+
+    <!-- LENDING (people I lent to) -->
+    <div id="page-lending" class="page">
+      <div class="content">
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openTxnModal()">Add Transaction</button>
+          <button class="btn btn-ghost btn-sm" onclick="openPersonModal()">Add Person</button>
+        </div>
+        <div class="search-bar"><span style="color:var(--text3)">🔍</span><input id="lend-search" placeholder="Search people…" oninput="renderLending()"/></div>
+        <div id="lending-list"></div>
+      </div>
+    </div>
+
+    <!-- BORROWING (I owe them) - Only actual borrowings -->
+    <div id="page-borrowing" class="page">
+      <div class="content">
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openBorrowingModal()">Add Borrowing</button>
+        </div>
+        <div class="search-bar"><span style="color:var(--text3)">🔍</span><input id="borrow-search" placeholder="Search borrowings…" oninput="renderBorrowing()"/></div>
+        <div id="borrowing-list"></div>
+      </div>
+    </div>
+
+    <!-- PEOPLE MANAGEMENT -->
+    <div id="page-people" class="page">
+      <div class="content">
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openPersonModal()">Add Person</button>
+        </div>
+        <div class="search-bar"><span style="color:var(--text3)">🔍</span><input id="people-search" placeholder="Search people…" oninput="renderPeople()"/></div>
+        <div id="people-list"></div>
+      </div>
+    </div>
+
+    <!-- CARDS -->
+    <div id="page-cards" class="page">
+      <div class="content">
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openCardModal()">Add Card</button>
+        </div>
+        <div class="sec-title">Saved Cards</div>
+        <div id="cards-list"></div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div id="page-reports" class="page">
+      <div class="content">
+        <div class="period-tabs">
+          <div class="period-tab active" onclick="setRPeriod('week',this)">Week</div>
+          <div class="period-tab" onclick="setRPeriod('month',this)">Month</div>
+          <div class="period-tab" onclick="setRPeriod('year',this)">Year</div>
+          <div class="period-tab" onclick="setRPeriod('all',this)">All</div>
+        </div>
+        <div id="reports-body"></div>
+      </div>
+    </div>
+
+    <!-- PERSON DETAIL (lending side) -->
+    <div id="page-person-detail" class="page">
+      <div class="content">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer" onclick="goBack()">
+          <span style="color:var(--text2);font-size:13px">←</span>
+          <span style="color:var(--text2);font-size:13px" id="back-label">Back</span>
+        </div>
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openTxnModal(currentPersonId)">Add Transaction</button>
+          <button class="btn btn-ghost btn-sm" onclick="openPersonModal(currentPersonId)">Edit Person</button>
+        </div>
+        <div id="person-detail-body"></div>
+      </div>
+    </div>
+
+    <!-- BORROW DETAIL -->
+    <div id="page-borrow-detail" class="page">
+      <div class="content">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer" onclick="showPage('borrowing')">
+          <span style="color:var(--text2);font-size:13px">←</span>
+          <span style="color:var(--text2);font-size:13px">Borrowing</span>
+        </div>
+        <div class="action-bar">
+          <button class="btn btn-primary btn-sm" onclick="openBorrowingModal(null,currentBorrowPersonId)">Add Borrowing</button>
+        </div>
+        <div id="borrow-detail-body"></div>
+      </div>
+    </div>
+
+    <!-- HELP -->
+    <div id="page-help" class="page">
+      <div class="content">
+        <div class="sec-title">Help & Guide</div>
+        <div id="help-content"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="page-settings" class="page">
+      <div class="content">
+        <div class="sec-title">Appearance</div>
+        <div class="set-row" onclick="toggleTheme()">
+          <div class="set-left"><span class="set-icon">🌙</span><span class="set-label">Dark Mode</span></div>
+          <label class="toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" id="dark-toggle" onchange="toggleTheme()"/>
+            <span class="tog-sl"></span>
+          </label>
+        </div>
+
+        <div class="sec-title">Customise Lists</div>
+        <div class="set-row" onclick="openListManager('categories')"><div class="set-left"><span class="set-icon">🏷️</span><span class="set-label">Categories</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="openListManager('modes')"><div class="set-left"><span class="set-icon">💳</span><span class="set-label">Payment Modes</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="openListManager('statuses')"><div class="set-left"><span class="set-icon">🔖</span><span class="set-label">Statuses</span></div><span style="color:var(--text3)">›</span></div>
+
+        <div class="sec-title">Security</div>
+        <div class="set-row" onclick="startChangePIN()"><div class="set-left"><span class="set-icon">🔐</span><span class="set-label">Change PIN</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="event.stopPropagation()">
+          <div class="set-left"><span class="set-icon">🧬</span><span class="set-label">Fingerprint / Face Unlock</span></div>
+          <label class="toggle">
+            <input type="checkbox" id="bio-toggle" onchange="toggleBiometricUnlock(this.checked)"/>
+            <span class="tog-sl"></span>
+          </label>
+        </div>
+        <div class="set-row" onclick="openAutoLockModal()"><div class="set-left"><span class="set-icon">🔒</span><span class="set-label">Auto Lock</span></div><span id="auto-lock-status" style="color:var(--text2);font-size:12px">Immediate</span></div>
+
+        <div class="sec-title">Data</div>
+        <div class="set-row" onclick="exportData()"><div class="set-left"><span class="set-icon">📤</span><span class="set-label">Export Backup (JSON)</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="shareBackup()"><div class="set-left"><span class="set-icon">📲</span><span class="set-label">Share Backup</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="openBackupDestinationModal()"><div class="set-left"><span class="set-icon">📁</span><span class="set-label">Backup Destination</span></div><span id="backup-destination-status" style="color:var(--text2);font-size:12px">Default</span></div>
+        <div class="set-row" id="backup-folder-row" onclick="configureBackupFolder()"><div class="set-left"><span class="set-icon">🗂️</span><span class="set-label">Specific Backup Folder</span></div><span id="backup-folder-status" style="color:var(--text2);font-size:12px">Not set</span></div>
+        <div class="set-row" onclick="document.getElementById('import-file').click()"><div class="set-left"><span class="set-icon">📥</span><span class="set-label">Import Backup</span></div><span style="color:var(--text3)">›</span></div>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"/>
+        <div class="set-row" onclick="restoreLastUpgradeSnapshot()"><div class="set-left"><span class="set-icon">🛟</span><span class="set-label">Restore Last Upgrade Snapshot</span></div><span id="upgrade-snapshot-status" style="color:var(--text2);font-size:12px">None</span></div>
+        <div class="set-row" onclick="openBackupScheduleModal()"><div class="set-left"><span class="set-icon">⏱️</span><span class="set-label">Backup Reminder Schedule</span></div><span id="backup-schedule-status" style="color:var(--text2);font-size:12px">7 days</span></div>
+        <div class="set-row"><div class="set-left"><span class="set-icon">🕒</span><span class="set-label">Last Backup</span></div><span id="backup-status" style="color:var(--text2);font-size:12px">Never</span></div>
+
+        <div class="sec-title">Help</div>
+        <div class="set-row" onclick="showPage('help')"><div class="set-left"><span class="set-icon">❓</span><span class="set-label">Help & Guide</span></div><span style="color:var(--text3)">›</span></div>
+        <div class="set-row" onclick="installApp()"><div class="set-left"><span class="set-icon">📲</span><span class="set-label">Install App</span></div><span id="install-status" style="color:var(--text2);font-size:12px">Check</span></div>
+
+        <div class="sec-title">About</div>
+        <div class="set-row"><div class="set-left"><span class="set-icon">ℹ️</span><span class="set-label">LenDen v4.0 · Local &amp; Private</span></div></div>
+
+        <div class="mt16">
+          <button class="btn btn-danger" onclick="confirmReset()">⚠️ Reset All Data</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV - Updated with 6 items -->
+  <div class="bottom-nav">
+    <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')"><span class="nav-icon">📊</span><span class="nav-label">Home</span></div>
+    <div class="nav-item" id="nav-lending" onclick="showPage('lending')"><span class="nav-icon">💸</span><span class="nav-label">Lending</span></div>
+    <div class="nav-item" id="nav-borrowing" onclick="showPage('borrowing')"><span class="nav-icon">🤝</span><span class="nav-label">Borrow</span></div>
+    <div class="nav-item" id="nav-people" onclick="showPage('people')"><span class="nav-icon">👥</span><span class="nav-label">People</span></div>
+    <div class="nav-item" id="nav-cards" onclick="showPage('cards')"><span class="nav-icon">💳</span><span class="nav-label">Cards</span></div>
+    <div class="nav-item" id="nav-reports" onclick="showPage('reports')"><span class="nav-icon">📈</span><span class="nav-label">Reports</span></div>
+  </div>
+
+  <!-- Legacy FAB (kept hidden for compatibility) -->
+  <button class="fab hidden" id="fab" onclick="handleFAB()" aria-label="Quick add">＋</button>
+</div>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="closeOverlayIf(event)">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

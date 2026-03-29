@@ -1,0 +1,14 @@
+{
+  "name": "lenden",
+  "private": true,
+  "version": "4.2.0",
+  "description": "LenDen PWA smoke tests",
+  "scripts": {
+    "test:smoke": "playwright test -c playwright.config.js",
+    "test:smoke:headed": "playwright test -c playwright.config.js --headed",
+    "test:smoke:debug": "PWDEBUG=1 playwright test -c playwright.config.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}
