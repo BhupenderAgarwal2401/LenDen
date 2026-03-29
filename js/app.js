@@ -10,6 +10,8 @@ const APP_VERSION = '4.2.0';
 const APP_VERSION_KEY = 'ld2_app_version';
 const UPGRADE_SNAPSHOT_KEY = 'ld2_upgrade_snapshot_latest';
 const INSTALL_BANNER_DISMISSED_KEY = 'ld2_install_banner_dismissed';
+const REFRESH_UNLOCK_RESUME_KEY = 'ld2_unlock_resume_until';
+const REFRESH_UNLOCK_RESUME_MS = 15000;
 const DB = {
   get people(){return LS.g('ld2_people')||[];},          set people(v){LS.s('ld2_people',v);},
   get cards(){return LS.g('ld2_cards')||[];},             set cards(v){LS.s('ld2_cards',v);},
@@ -88,7 +90,17 @@ let isUpdateAvailable=false;
 let inactivityLockTimer=null;
 let backgroundLockTimer=null;
 function initPin(){
-  if(!DB.pin){pinMode='setup';}else{pinMode='verify';}
+  if(!DB.pin){
+    pinMode='setup';
+  }else{
+    pinMode='verify';
+    const resumeUntil = Number(sessionStorage.getItem(REFRESH_UNLOCK_RESUME_KEY) || 0);
+    if(Number.isFinite(resumeUntil) && resumeUntil > Date.now()){
+      sessionStorage.removeItem(REFRESH_UNLOCK_RESUME_KEY);
+      unlockApp();
+      return;
+    }
+  }
   updatePinUI();
 }
 function updatePinUI(){
@@ -128,6 +140,7 @@ function processPIN(){
   }
 }
 function unlockApp(){
+  sessionStorage.removeItem(REFRESH_UNLOCK_RESUME_KEY);
   document.getElementById('pin-screen').style.display='none';
   document.getElementById('app').classList.add('visible');
   isAppUnlocked=true;
@@ -147,6 +160,7 @@ function unlockApp(){
   }, 250);
 }
 function lockApp(){
+  sessionStorage.removeItem(REFRESH_UNLOCK_RESUME_KEY);
   if(!isAppUnlocked || !DB.pin) return;
   isAppUnlocked=false;
   clearTimeout(inactivityLockTimer);
@@ -960,10 +974,10 @@ function openTxnModal(prePersonId=null, editId=null){
       <div class="field"><label>Additional Flat Charge ₹</label><input id="m-fee-flat" type="number" inputmode="decimal" placeholder="Optional" value="${t?.feeFlat||''}" oninput="calcDisc()"/></div>
       <div class="field"><label>GST on Flat Charge %</label><input id="m-fee-gst-flat" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.feeGstOnFlatPct ?? t?.feeGstPct ?? ''}" oninput="calcDisc()"/></div>
       <div class="field mt8">
-        <div class="emi-toggle-row">
+        <label class="emi-toggle-row" for="m-is-emi">
           <input id="m-is-emi" type="checkbox" ${t?.isEmi?'checked':''} onchange="toggleEmiFields()"/>
-          <label for="m-is-emi">Is EMI Transaction?</label>
-        </div>
+          <span>Is EMI Transaction?</span>
+        </label>
       </div>
       <div id="emi-fields" style="display:none">
         <div class="field-row">
@@ -2678,6 +2692,12 @@ document.addEventListener('visibilitychange', () => {
   const hidden = document.visibilityState === 'hidden';
   applyBackgroundLockPolicy(hidden);
   if(!hidden) recordUserActivity();
+});
+window.addEventListener('beforeunload', () => {
+  if(!isAppUnlocked || !DB.pin) return;
+  try{
+    sessionStorage.setItem(REFRESH_UNLOCK_RESUME_KEY, String(Date.now()+REFRESH_UNLOCK_RESUME_MS));
+  }catch{}
 });
 window.addEventListener('focus', ()=>recordUserActivity());
 ['click','touchstart','keydown','scroll'].forEach(evt=>{
