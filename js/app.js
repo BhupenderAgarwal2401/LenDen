@@ -273,6 +273,11 @@ function refreshCurrentPage(){
   else if(currentPage==='person-detail'&&currentPersonId)renderPersonDetail(currentPersonId);
   else if(currentPage==='borrow-detail'&&currentBorrowPersonId)renderBorrowPersonDetail(currentBorrowPersonId);
 }
+function refreshPageData(){
+  runDataMigrations();
+  refreshCurrentPage();
+  toast('Refreshed latest data and recalculated balances ✓');
+}
 function isStandaloneMode(){
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
