@@ -960,10 +960,10 @@ function openTxnModal(prePersonId=null, editId=null){
       <div class="field"><label>Additional Flat Charge ₹</label><input id="m-fee-flat" type="number" inputmode="decimal" placeholder="Optional" value="${t?.feeFlat||''}" oninput="calcDisc()"/></div>
       <div class="field"><label>GST on Flat Charge %</label><input id="m-fee-gst-flat" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.feeGstOnFlatPct ?? t?.feeGstPct ?? ''}" oninput="calcDisc()"/></div>
       <div class="field mt8">
-        <label style="display:flex;align-items:center;gap:8px">
+        <div class="emi-toggle-row">
           <input id="m-is-emi" type="checkbox" ${t?.isEmi?'checked':''} onchange="toggleEmiFields()"/>
-          <span>Is EMI Transaction?</span>
-        </label>
+          <label for="m-is-emi">Is EMI Transaction?</label>
+        </div>
       </div>
       <div id="emi-fields" style="display:none">
         <div class="field-row">
@@ -2066,6 +2066,7 @@ const BACKUP_DB_STORE = 'kv';
 const BACKUP_DIR_HANDLE_KEY = 'backupDirHandle';
 const AUTO_LOCK_BG_DEFAULT = 'immediate';
 const AUTO_LOCK_INACTIVITY_DEFAULT = 0;
+const AUTO_LOCK_BG_GRACE_DEFAULT = 2;
 
 function getAutoLockOnBackground(){
   const v = getSetting('autoLockOnBackground', AUTO_LOCK_BG_DEFAULT);
@@ -2083,6 +2084,15 @@ function setAutoLockInactivityMin(v){
   const n=Math.floor(Number(v)||0);
   if([0,1,5,30].includes(n)) setSetting('autoLockInactivityMin', n);
 }
+function getAutoLockBgGraceSec(){
+  const raw = Number(getSetting('autoLockBgGraceSec', AUTO_LOCK_BG_GRACE_DEFAULT));
+  const allowed=[0,2,5];
+  return allowed.includes(raw) ? raw : AUTO_LOCK_BG_GRACE_DEFAULT;
+}
+function setAutoLockBgGraceSec(v){
+  const n=Math.floor(Number(v)||0);
+  if([0,2,5].includes(n)) setSetting('autoLockBgGraceSec', n);
+}
 function lockDelayMs(mode){
   if(mode==='1m') return 60000;
   if(mode==='5m') return 300000;
@@ -2094,13 +2104,16 @@ function renderAutoLockStatus(){
   if(!el) return;
   const bg=getAutoLockOnBackground();
   const ina=getAutoLockInactivityMin();
+  const grace=getAutoLockBgGraceSec();
   const bgLabel = bg==='off' ? 'No bg lock' : (bg==='immediate' ? 'Bg: Immediate' : `Bg: ${bg}`);
+  const graceLabel = bg==='immediate' ? ` (grace ${grace}s)` : '';
   const inLabel = ina===0 ? 'Inactivity: Off' : `Inactivity: ${ina}m`;
-  el.textContent=`${bgLabel} · ${inLabel}`;
+  el.textContent=`${bgLabel}${graceLabel} · ${inLabel}`;
 }
 function openAutoLockModal(){
   const bg=getAutoLockOnBackground();
   const ina=getAutoLockInactivityMin();
+  const grace=getAutoLockBgGraceSec();
   openModal(`
     <div class="modal-title">Auto Lock</div>
     <div class="field">
@@ -2111,6 +2124,14 @@ function openAutoLockModal(){
         <option value="5m" ${bg==='5m'?'selected':''}>After 5 minutes</option>
         <option value="30m" ${bg==='30m'?'selected':''}>After 30 minutes</option>
         <option value="off" ${bg==='off'?'selected':''}>Do not lock in background</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Immediate background lock grace</label>
+      <select id="auto-lock-grace-select">
+        <option value="0" ${grace===0?'selected':''}>0 seconds (strict)</option>
+        <option value="2" ${grace===2?'selected':''}>2 seconds (recommended)</option>
+        <option value="5" ${grace===5?'selected':''}>5 seconds</option>
       </select>
     </div>
     <div class="field">
@@ -2131,8 +2152,10 @@ function openAutoLockModal(){
 }
 function saveAutoLockSettings(){
   const bg=document.getElementById('auto-lock-bg-select')?.value||AUTO_LOCK_BG_DEFAULT;
+  const grace=Number(document.getElementById('auto-lock-grace-select')?.value||AUTO_LOCK_BG_GRACE_DEFAULT);
   const ina=Number(document.getElementById('auto-lock-ina-select')?.value||AUTO_LOCK_INACTIVITY_DEFAULT);
   setAutoLockOnBackground(bg);
+  setAutoLockBgGraceSec(grace);
   setAutoLockInactivityMin(ina);
   renderAutoLockStatus();
   closeModal();
@@ -2146,7 +2169,14 @@ function applyBackgroundLockPolicy(isHidden){
   if(!isHidden) return;
   const mode=getAutoLockOnBackground();
   if(mode==='off') return;
-  if(mode==='immediate'){ lockApp(); return; }
+  if(mode==='immediate'){
+    // Grace period avoids accidental locks from pull-to-refresh or brief app switches.
+    const graceSec=getAutoLockBgGraceSec();
+    backgroundLockTimer=setTimeout(()=>{
+      if(document.visibilityState==='hidden') lockApp();
+    }, graceSec*1000);
+    return;
+  }
   const ms=lockDelayMs(mode);
   if(ms>0){
     backgroundLockTimer=setTimeout(()=>{

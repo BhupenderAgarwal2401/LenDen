@@ -189,6 +189,9 @@ input,textarea,select,button{font-family:'Sora',sans-serif;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .other-detail{display:none;margin-top:6px;}
 .other-detail input{background:var(--surface3);border-style:dashed;}
+.emi-toggle-row{display:flex;align-items:center;gap:8px;padding:4px 0;justify-content:flex-start;}
+.emi-toggle-row input[type="checkbox"]{margin:0;transform:scale(1.05);}
+.emi-toggle-row label{margin:0;font-size:12px;color:var(--text2);font-weight:600;letter-spacing:.2px;display:inline;}
 
 /* ====== BUTTONS ====== */
 .btn{width:100%;padding:13px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-family:'Sora',sans-serif;}
