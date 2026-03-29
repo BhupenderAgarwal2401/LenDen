@@ -1,0 +1,39 @@
+---
+description: LenDen architecture, EMI, testing, and collaboration guardrails
+alwaysApply: true
+---
+
+# Architecture and Data
+
+- Keep LenDen fully client-side and static-hostable; avoid backend/API dependencies unless explicitly approved.
+- Keep `index.html` + `css/styles.css` + `js/app.js` structure intact and use existing `showPage`/`page-*`/`nav-*` patterns.
+- Use `LS`/`DB` wrappers for persistence; do not scatter direct localStorage usage in new code.
+- Preserve canonical `ld2_*` keys and backward compatibility via migration/normalization, not destructive schema changes.
+- Reuse core helpers (`fmt`, `today`, date helpers, deterministic finance calculations) and escape user text with `escHtml`.
+
+# EMI Rules
+
+- Preserve fee/GST settlement model for lending (`chargedAmount`, fee %, flat fee, GST components, settlement).
+- Use dedicated `ld2_emi_schedules` for installment planning; keep actual repayments in `ld2_payments`.
+- Keep EMI schedule entries pending by default; only confirmed receipts affect transaction paid/due status.
+- Protect settled repayment history on edits; do not silently remove already received installments.
+
+# Testing and Delivery
+
+- Add/update `tests/regression.js` for finance/storage/migration behavior changes.
+- Maintain smoke coverage in `tests/e2e/smoke.spec.js` for boot and critical repayment flows.
+- After substantial edits, run syntax/lint checks and attempt smoke tests when environment permits.
+- If runtime prerequisites are blocked (for example Playwright browser install), report blocker and exact local command to run.
+- Keep CI/deploy static-first (`netlify.toml` publish root), npm registry pinned to npmjs.org, and Playwright artifacts uploaded on failures.
+
+# Collaboration and Suggestions
+
+- Execute end-to-end where feasible: implement, validate, and summarize.
+- Preserve user’s in-progress local changes; avoid reverting unrelated edits.
+- If a request is likely suboptimal, still address intent and also suggest 2-3 better alternatives with concise trade-offs.
+- Default recommendations should favor simplicity, backward compatibility, data safety, and testability.
+
+# Documentation Maintenance
+
+- Keep `README.md` accurate with current architecture, features, storage model, testing, and upgrade notes.
+- Whenever significant enhancements or new features are added, update `README.md` in the same change set.

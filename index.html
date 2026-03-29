@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0f1a"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<title>LenDen v4</title>
+<title>LenDen</title>
 <link rel="manifest" href="manifest.json"/>
 <link rel="apple-touch-icon" href="icons/icon-192.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -179,6 +179,7 @@
             <span class="tog-sl"></span>
           </label>
         </div>
+        <div class="set-row" onclick="openBackgroundThemeModal()"><div class="set-left"><span class="set-icon">🖼️</span><span class="set-label">Background Theme</span></div><span id="bg-theme-status" style="color:var(--text2);font-size:12px">Default</span></div>
 
         <div class="sec-title">Customise Lists</div>
         <div class="set-row" onclick="openListManager('categories')"><div class="set-left"><span class="set-icon">🏷️</span><span class="set-label">Categories</span></div><span style="color:var(--text3)">›</span></div>
@@ -212,7 +213,7 @@
         <div class="set-row" onclick="installApp()"><div class="set-left"><span class="set-icon">📲</span><span class="set-label">Install App</span></div><span id="install-status" style="color:var(--text2);font-size:12px">Check</span></div>
 
         <div class="sec-title">About</div>
-        <div class="set-row"><div class="set-left"><span class="set-icon">ℹ️</span><span class="set-label">LenDen v4.0 · Local &amp; Private</span></div></div>
+        <div class="set-row"><div class="set-left"><span class="set-icon">ℹ️</span><span class="set-label">LenDen · Local &amp; Private</span></div></div>
 
         <div class="mt16">
           <button class="btn btn-danger" onclick="confirmReset()">⚠️ Reset All Data</button>

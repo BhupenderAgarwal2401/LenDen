@@ -15,6 +15,7 @@ const DB = {
   get cards(){return LS.g('ld2_cards')||[];},             set cards(v){LS.s('ld2_cards',v);},
   get transactions(){return LS.g('ld2_txns')||[];},       set transactions(v){LS.s('ld2_txns',v);},
   get payments(){return LS.g('ld2_payments')||[];},       set payments(v){LS.s('ld2_payments',v);},
+  get emiSchedules(){return LS.g('ld2_emi_schedules')||[];}, set emiSchedules(v){LS.s('ld2_emi_schedules',v);},
   get borrowings(){return LS.g('ld2_borrows')||[];},      set borrowings(v){LS.s('ld2_borrows',v);},
   get bpayments(){return LS.g('ld2_bpayments')||[];},     set bpayments(v){LS.s('ld2_bpayments',v);},
   get pin(){return LS.g('ld2_pin');},                     set pin(v){LS.s('ld2_pin',v);},
@@ -48,6 +49,19 @@ function getBiometricCredId(){ return getSetting('biometricCredId', ''); }
 const fmt = n => '₹'+Math.abs(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const today = () => new Date().toISOString().slice(0,10);
+const round2 = n => Math.round((Number(n)||0)*100)/100;
+function addMonthsISO(dateStr, monthsToAdd){
+  const months=Math.max(0, Math.floor(Number(monthsToAdd)||0));
+  const safe=dateStr||today();
+  const dt=new Date(`${safe}T00:00:00`);
+  if(Number.isNaN(dt.getTime())) return safe;
+  const day=dt.getDate();
+  dt.setDate(1);
+  dt.setMonth(dt.getMonth()+months);
+  const lastDay=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
+  dt.setDate(Math.min(day,lastDay));
+  return dt.toISOString().slice(0,10);
+}
 const avCol = name => AV_COLORS[(name||'?').charCodeAt(0)%AV_COLORS.length];
 const avInit = name => (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 const ordinal = n => {const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
@@ -223,14 +237,107 @@ async function toggleBiometricUnlock(enable){
 // ═══════════════════════════════════════════════
 // THEME
 // ═══════════════════════════════════════════════
+const DARK_BG_PRESETS = [
+  { id:'default', label:'Default' },
+  { id:'graphite', label:'Graphite' },
+  { id:'midnight-blue', label:'Midnight Blue' },
+  { id:'forest-night', label:'Forest Night' },
+  { id:'royal-plum', label:'Royal Plum' }
+];
+const LIGHT_BG_PRESETS = [
+  { id:'default', label:'Default' },
+  { id:'warm-paper', label:'Warm Paper' },
+  { id:'cool-mist', label:'Cool Mist' },
+  { id:'soft-lavender', label:'Soft Lavender' },
+  { id:'mint-ice', label:'Mint Ice' }
+];
+let bgThemePreviewState=null;
+function getBgPresets(isDark){
+  return isDark ? DARK_BG_PRESETS : LIGHT_BG_PRESETS;
+}
+function getActiveBgTheme(){
+  const dark=getSetting('darkMode',true);
+  const key=dark?'darkBgTheme':'lightBgTheme';
+  const allowed=getBgPresets(dark).map(p=>p.id);
+  const chosen=getSetting(key,'default');
+  return allowed.includes(chosen)?chosen:'default';
+}
+function renderBackgroundThemeStatus(){
+  const el=document.getElementById('bg-theme-status');
+  if(!el) return;
+  const dark=getSetting('darkMode',true);
+  const active=getActiveBgTheme();
+  const preset=getBgPresets(dark).find(p=>p.id===active);
+  el.textContent=preset?.label||'Default';
+}
+function openBackgroundThemeModal(){
+  const dark=getSetting('darkMode',true);
+  const active=getActiveBgTheme();
+  bgThemePreviewState={dark,original:active};
+  const options=getBgPresets(dark).map(p=>`<option value="${p.id}" ${p.id===active?'selected':''}>${escHtml(p.label)}</option>`).join('');
+  openModal(`
+    <div class="modal-title">Background Theme</div>
+    <div class="field">
+      <label>Theme Palette</label>
+      <select id="bg-theme-select" onchange="previewBackgroundThemeSelection(this.value)">${options}</select>
+      <div class="fs11 muted mt4">Background presets are accessibility-safe and keep surface/text contrast unchanged.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="cancelBackgroundThemeSelection()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBackgroundThemeSelection()">Save</button>
+    </div>
+  `);
+}
+function previewBackgroundThemeSelection(value){
+  const dark=getSetting('darkMode',true);
+  const allowed=getBgPresets(dark).map(p=>p.id);
+  const next=allowed.includes(value)?value:'default';
+  document.documentElement.setAttribute('data-bg-theme',next);
+  const status=document.getElementById('bg-theme-status');
+  if(status){
+    const preset=getBgPresets(dark).find(p=>p.id===next);
+    status.textContent=preset?.label||'Default';
+  }
+}
+function cancelBackgroundThemeSelection(){
+  const state=bgThemePreviewState;
+  if(state){
+    const currentDark=getSetting('darkMode',true);
+    if(currentDark===state.dark){
+      document.documentElement.setAttribute('data-bg-theme',state.original||'default');
+      renderBackgroundThemeStatus();
+    }else{
+      applyTheme();
+    }
+  }else{
+    applyTheme();
+  }
+  bgThemePreviewState=null;
+  closeModal();
+}
+function saveBackgroundThemeSelection(){
+  const dark=getSetting('darkMode',true);
+  const key=dark?'darkBgTheme':'lightBgTheme';
+  const val=document.getElementById('bg-theme-select')?.value||'default';
+  const allowed=getBgPresets(dark).map(p=>p.id);
+  setSetting(key,allowed.includes(val)?val:'default');
+  bgThemePreviewState=null;
+  applyTheme();
+  renderBackgroundThemeStatus();
+  closeModal();
+  toast('Background theme updated ✓');
+}
 function applyTheme(){
   const dark=getSetting('darkMode',true);
-  document.documentElement.setAttribute('data-theme',dark?'dark':'light');
+  const themeName=dark?'dark':'light';
+  document.documentElement.setAttribute('data-theme',themeName);
+  document.documentElement.setAttribute('data-bg-theme',getActiveBgTheme());
   document.getElementById('theme-btn').textContent=dark?'🌙':'☀️';
   const tog=document.getElementById('dark-toggle');
   if(tog) tog.checked=dark;
   const bioTog=document.getElementById('bio-toggle');
   if(bioTog) bioTog.checked=isBiometricEnabled() && !!getBiometricCredId();
+  renderBackgroundThemeStatus();
 }
 function toggleTheme(){
   const dark=!getSetting('darkMode',true);
@@ -260,7 +367,7 @@ function showPage(name){
   else if(name==='cards')renderCards();
   else if(name==='reports')renderReports();
   else if(name==='help')renderHelp();
-  else if(name==='settings'){renderBackupStatus();renderBackupScheduleStatus();renderBackupDestinationStatus();renderBackupFolderStatus();renderUpgradeSnapshotStatus();renderAutoLockStatus();renderInstallStatus();}
+  else if(name==='settings'){renderBackupStatus();renderBackupScheduleStatus();renderBackupDestinationStatus();renderBackupFolderStatus();renderUpgradeSnapshotStatus();renderAutoLockStatus();renderInstallStatus();renderBackgroundThemeStatus();}
 }
 
 function refreshCurrentPage(){
@@ -447,6 +554,149 @@ function getTxnBalance(txn){
   const paid=getTxnPaid(txn.id);
   return Math.max(0,settle-paid);
 }
+function updateTxnSettlementStatus(txnId){
+  const txn=DB.transactions.find(t=>t.id===txnId);
+  if(!txn) return;
+  const settle=getTxnNetSettlement(txn);
+  const totalPaid=DB.payments.filter(p=>p.txnId===txnId).reduce((s,p)=>s+(p.amount||0),0);
+  const txns=DB.transactions.slice();
+  const i=txns.findIndex(t=>t.id===txnId);
+  if(i<0) return;
+  txns[i].status=totalPaid>=settle?'settled':totalPaid>0?'partial':'pending';
+  DB.transactions=txns;
+}
+function computeEmiPlan(input){
+  const principal=round2(input.principal);
+  const annualRatePct=Math.max(0, Number(input.annualRatePct)||0);
+  const tenureValue=Math.max(1, Math.floor(Number(input.tenureValue)||1));
+  const tenureUnit=(input.tenureUnit==='years')?'years':'months';
+  const tenureMonths=tenureUnit==='years'?tenureValue*12:tenureValue;
+  const startDate=input.startDate||today();
+  const processingFee=round2(input.processingFee);
+  const processingFeeGstPct=Math.max(0, Number(input.processingFeeGstPct)||0);
+  const interestGstPct=Math.max(0, Number(input.interestGstPct)||0);
+
+  const totalInterest=round2(principal*(annualRatePct/100)*(tenureMonths/12));
+  const interestGst=round2(totalInterest*(interestGstPct/100));
+  const processingFeeGst=round2(processingFee*(processingFeeGstPct/100));
+  const coreTotal=round2(principal+totalInterest+interestGst);
+  const overallTotal=round2(coreTotal+processingFee+processingFeeGst);
+  const monthlyBase=round2(coreTotal/tenureMonths);
+  const endDate=addMonthsISO(startDate,tenureMonths-1);
+  const schedule=[];
+  let remainingCore=coreTotal;
+  for(let i=1;i<=tenureMonths;i++){
+    const dueDate=addMonthsISO(startDate,i-1);
+    const coreAmt=(i===tenureMonths)?round2(remainingCore):monthlyBase;
+    remainingCore=round2(remainingCore-coreAmt);
+    const upfront=i===1?round2(processingFee+processingFeeGst):0;
+    schedule.push({
+      installmentNo:i,
+      totalInstallments:tenureMonths,
+      dueDate,
+      expectedAmount:round2(coreAmt+upfront),
+      coreAmount:coreAmt,
+      upfrontCharges:upfront
+    });
+  }
+  const firstInstallmentAmount=schedule[0]?.expectedAmount||0;
+  return {
+    principal,
+    annualRatePct,
+    tenureUnit,
+    tenureValue,
+    tenureMonths,
+    startDate,
+    endDate,
+    processingFee,
+    processingFeeGstPct,
+    processingFeeGst,
+    interestGstPct,
+    totalInterest,
+    interestGst,
+    coreTotal,
+    overallTotal,
+    monthlyBase,
+    firstInstallmentAmount,
+    schedule
+  };
+}
+function buildEmiScheduleEntries(txnId, emiPlan){
+  return emiPlan.schedule.map(s=>({
+    id:uid(),
+    txnId,
+    expectedAmount:s.expectedAmount,
+    date:s.dueDate,
+    settled:false,
+    receivedAmount:0,
+    receivedDate:null,
+    paymentId:null,
+    mode:'EMI',
+    notes:`EMI ${s.installmentNo}/${s.totalInstallments} scheduled`,
+    installmentNo:s.installmentNo,
+    totalInstallments:s.totalInstallments,
+    generatedAt:today()
+  }));
+}
+function getTxnEmiSchedules(txnId){
+  return DB.emiSchedules
+    .filter(s=>s.txnId===txnId)
+    .sort((a,b)=>{
+      const d=(a.date||'').localeCompare(b.date||'');
+      if(d!==0) return d;
+      return (a.installmentNo||0)-(b.installmentNo||0);
+    });
+}
+function rebuildPendingEmiScheduleForTxn(txn){
+  const all=getTxnEmiSchedules(txn.id);
+  const settled=all
+    .filter(s=>s.settled||s.paymentId||((s.receivedAmount||0)>0))
+    .sort((a,b)=>(a.installmentNo||0)-(b.installmentNo||0));
+  const settledCount=settled.length;
+  const plan=computeEmiPlan({
+    principal:txn.chargedAmount||0,
+    annualRatePct:txn.emiAnnualRatePct||0,
+    tenureValue:txn.emiTenureValue||1,
+    tenureUnit:txn.emiTenureUnit||'months',
+    startDate:txn.emiStartDate||txn.date||today(),
+    processingFee:txn.emiProcessingFee||0,
+    processingFeeGstPct:txn.emiProcessingFeeGstPct||0,
+    interestGstPct:txn.emiInterestGstPct||0
+  });
+  if(plan.tenureMonths<settledCount){
+    return {ok:false,message:`Tenure cannot be less than ${settledCount} settled EMI installment(s)`};
+  }
+  const rebuiltAll=buildEmiScheduleEntries(txn.id,plan);
+  const settledNormalized=settled.map((s,idx)=>({
+    ...s,
+    installmentNo:idx+1,
+    totalInstallments:plan.tenureMonths
+  }));
+  const rebuiltPending=rebuiltAll.slice(settledCount);
+  const others=DB.emiSchedules.filter(s=>s.txnId!==txn.id);
+  DB.emiSchedules=[...others,...settledNormalized,...rebuiltPending];
+  return {ok:true,pendingCount:rebuiltPending.length,totalCount:plan.tenureMonths};
+}
+function previewPendingEmiRebuild(txn){
+  const all=getTxnEmiSchedules(txn.id);
+  const settledCount=all.filter(s=>s.settled||s.paymentId||((s.receivedAmount||0)>0)).length;
+  const plan=computeEmiPlan({
+    principal:txn.chargedAmount||0,
+    annualRatePct:txn.emiAnnualRatePct||0,
+    tenureValue:txn.emiTenureValue||1,
+    tenureUnit:txn.emiTenureUnit||'months',
+    startDate:txn.emiStartDate||txn.date||today(),
+    processingFee:txn.emiProcessingFee||0,
+    processingFeeGstPct:txn.emiProcessingFeeGstPct||0,
+    interestGstPct:txn.emiInterestGstPct||0
+  });
+  const totalCount=plan.tenureMonths;
+  return {
+    settledCount,
+    totalCount,
+    pendingCount:Math.max(0,totalCount-settledCount)
+  };
+}
 function getPersonLendBal(pid){
   return DB.transactions.filter(t=>t.personId===pid&&t.type==='given')
     .reduce((s,t)=>s+getTxnBalance(t),0);
@@ -506,6 +756,7 @@ function renderTxnCard(t){
       <div class="txn-tags">
         <span class="tag">${CAT_ICONS[cat]||'💰'} ${escHtml(catLabel)}</span>
         <span class="tag">${escHtml(modeLabel)}</span>
+        ${t.isEmi?`<span class="tag">🗓️ EMI</span>`:''}
         ${card?`<span class="tag">💳 ${escHtml(card.nickname)}</span>`:''}
         <span class="badge ${t.status||'pending'}">${t.status||'pending'}</span>
       </div>
@@ -708,6 +959,28 @@ function openTxnModal(prePersonId=null, editId=null){
       </div>
       <div class="field"><label>Additional Flat Charge ₹</label><input id="m-fee-flat" type="number" inputmode="decimal" placeholder="Optional" value="${t?.feeFlat||''}" oninput="calcDisc()"/></div>
       <div class="field"><label>GST on Flat Charge %</label><input id="m-fee-gst-flat" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.feeGstOnFlatPct ?? t?.feeGstPct ?? ''}" oninput="calcDisc()"/></div>
+      <div class="field mt8">
+        <label style="display:flex;align-items:center;gap:8px">
+          <input id="m-is-emi" type="checkbox" ${t?.isEmi?'checked':''} onchange="toggleEmiFields()"/>
+          <span>Is EMI Transaction?</span>
+        </label>
+      </div>
+      <div id="emi-fields" style="display:none">
+        <div class="field-row">
+          <div class="field"><label>EMI Interest Rate (per annum %) *</label><input id="m-emi-rate" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.emiAnnualRatePct||''}" oninput="calcDisc()"/></div>
+          <div class="field"><label>Tenure Value *</label><input id="m-emi-tenure" type="number" inputmode="numeric" min="1" step="1" placeholder="e.g. 12" value="${t?.emiTenureValue||''}" oninput="calcDisc()"/></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Tenure Unit *</label><select id="m-emi-tenure-unit" onchange="calcDisc()"><option value="months" ${(t?.emiTenureUnit||'months')==='months'?'selected':''}>Months</option><option value="years" ${t?.emiTenureUnit==='years'?'selected':''}>Years</option></select></div>
+          <div class="field"><label>EMI Start Date *</label><input id="m-emi-start" type="date" value="${t?.emiStartDate||t?.date||today()}" oninput="calcDisc()"/></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>One-Time Processing Fee ₹</label><input id="m-emi-proc-fee" type="number" inputmode="decimal" placeholder="0.00" value="${t?.emiProcessingFee||''}" oninput="calcDisc()"/></div>
+          <div class="field"><label>GST on Processing Fee %</label><input id="m-emi-proc-gst" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.emiProcessingFeeGstPct||''}" oninput="calcDisc()"/></div>
+        </div>
+        <div class="field"><label>GST on Interest % (optional)</label><input id="m-emi-interest-gst" type="number" inputmode="decimal" placeholder="e.g. 18" value="${t?.emiInterestGstPct||''}" oninput="calcDisc()"/></div>
+        <div id="emi-hint" class="fs11 muted" style="margin-top:6px"></div>
+      </div>
     </div>
     <div id="recv-fields" style="display:none">
       <div class="field"><label>Amount Received ₹ *</label><input id="m-recv-amt" type="number" inputmode="decimal" placeholder="0.00" value="${t?.amount||''}"/></div>
@@ -730,10 +1003,12 @@ function openTxnModal(prePersonId=null, editId=null){
     <div class="btn-row">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       ${t?`<button class="btn btn-danger" onclick="deleteTxn('${t.id}')">Delete</button>`:''}
+      ${t?.isEmi?`<button class="btn btn-ghost" onclick="saveTxn('${editId||''}',true)">Rebuild Pending EMI</button>`:''}
       <button class="btn btn-primary" onclick="saveTxn('${editId||''}')">Save</button>
     </div>
   `);
   toggleTxnType();
+  toggleEmiFields();
   renderSSZone('m-ss-zone'); // Render screenshots
   if(t?.category==='Other'&&t?.categoryOther)toggleOther('m-cat','m-cat-other',getCats(),true);
   if(t?.mode==='Other'&&t?.modeOther)toggleOther('m-mode','m-mode-other',getModes(),true);
@@ -752,6 +1027,12 @@ function toggleTxnType(){
   document.getElementById('given-fields').style.display=t==='given'?'block':'none';
   document.getElementById('recv-fields').style.display=t==='received'?'block':'none';
 }
+function toggleEmiFields(){
+  const enabled=!!document.getElementById('m-is-emi')?.checked;
+  const wrap=document.getElementById('emi-fields');
+  if(wrap) wrap.style.display=enabled?'block':'none';
+  calcDisc();
+}
 
 function calcDisc(){
   const charged=parseFloat(document.getElementById('m-charged')?.value)||0;
@@ -768,7 +1049,24 @@ function calcDisc(){
   const d=document.getElementById('disc-hint');
   if(!d) return;
   const discount = Math.max(0, gross - (Number.isFinite(settle) ? settle : gross));
-  d.innerHTML=`Base ${fmt(charged)} + Fee ${fmt(feeOnCharged)} + Flat ${fmt(feeFlat)} + GST(Fee) ${fmt(gstOnFee)} + GST(Flat) ${fmt(gstOnFlat)} = <b>${fmt(gross)}</b>${discount>0?` · Discount absorbed ${fmt(discount)}`:''}`;
+  let msg=`Base ${fmt(charged)} + Fee ${fmt(feeOnCharged)} + Flat ${fmt(feeFlat)} + GST(Fee) ${fmt(gstOnFee)} + GST(Flat) ${fmt(gstOnFlat)} = <b>${fmt(gross)}</b>${discount>0?` · Discount absorbed ${fmt(discount)}`:''}`;
+  const isEmi=!!document.getElementById('m-is-emi')?.checked;
+  if(isEmi&&charged>0){
+    const plan=computeEmiPlan({
+      principal:charged,
+      annualRatePct:parseFloat(document.getElementById('m-emi-rate')?.value)||0,
+      tenureValue:parseFloat(document.getElementById('m-emi-tenure')?.value)||1,
+      tenureUnit:document.getElementById('m-emi-tenure-unit')?.value||'months',
+      startDate:document.getElementById('m-emi-start')?.value||today(),
+      processingFee:parseFloat(document.getElementById('m-emi-proc-fee')?.value)||0,
+      processingFeeGstPct:parseFloat(document.getElementById('m-emi-proc-gst')?.value)||0,
+      interestGstPct:parseFloat(document.getElementById('m-emi-interest-gst')?.value)||0
+    });
+    msg += `<br/>EMI Plan: ${plan.tenureMonths} installments · First ${fmt(plan.firstInstallmentAmount)} · Next around ${fmt(plan.monthlyBase)} · Total recoverable ${fmt(plan.overallTotal)} (till ${plan.endDate})`;
+    const emiHint=document.getElementById('emi-hint');
+    if(emiHint) emiHint.innerHTML=`Interest ${fmt(plan.totalInterest)}${plan.interestGst>0?` + GST(Interest) ${fmt(plan.interestGst)}`:''}${plan.processingFee>0?` + Processing ${fmt(plan.processingFee)}${plan.processingFeeGst>0?` + GST ${fmt(plan.processingFeeGst)}`:''}`:''}`;
+  }
+  d.innerHTML=msg;
 }
 
 function showSettlementHelp(){
@@ -788,6 +1086,14 @@ function captureTxnFormState(){
     mode: document.getElementById('m-mode')?.value,
     status: document.getElementById('m-status')?.value,
     notes: document.getElementById('m-notes')?.value,
+    isEmi: document.getElementById('m-is-emi')?.checked,
+    emiRate: document.getElementById('m-emi-rate')?.value,
+    emiTenure: document.getElementById('m-emi-tenure')?.value,
+    emiTenureUnit: document.getElementById('m-emi-tenure-unit')?.value,
+    emiStart: document.getElementById('m-emi-start')?.value,
+    emiProcFee: document.getElementById('m-emi-proc-fee')?.value,
+    emiProcGst: document.getElementById('m-emi-proc-gst')?.value,
+    emiInterestGst: document.getElementById('m-emi-interest-gst')?.value,
     pendingSS, pendingSSName, pendingSSList, txnBucket:[...getUploadList('m-ss-zone')]
   };
 }
@@ -806,10 +1112,19 @@ function restoreTxnFormState(newPersonId=''){
   if(s.mode)document.getElementById('m-mode').value=s.mode;
   if(s.status)document.getElementById('m-status').value=s.status;
   if(s.notes)document.getElementById('m-notes').value=s.notes;
+  if(document.getElementById('m-is-emi')) document.getElementById('m-is-emi').checked=!!s.isEmi;
+  if(s.emiRate)document.getElementById('m-emi-rate').value=s.emiRate;
+  if(s.emiTenure)document.getElementById('m-emi-tenure').value=s.emiTenure;
+  if(s.emiTenureUnit)document.getElementById('m-emi-tenure-unit').value=s.emiTenureUnit;
+  if(s.emiStart)document.getElementById('m-emi-start').value=s.emiStart;
+  if(s.emiProcFee)document.getElementById('m-emi-proc-fee').value=s.emiProcFee;
+  if(s.emiProcGst)document.getElementById('m-emi-proc-gst').value=s.emiProcGst;
+  if(s.emiInterestGst)document.getElementById('m-emi-interest-gst').value=s.emiInterestGst;
   pendingSS=s.pendingSS; pendingSSName=s.pendingSSName; pendingSSList=s.pendingSSList||[];
   setUploadList('m-ss-zone', s.txnBucket||[]);
   renderSSZone('m-ss-zone');
   toggleTxnType();
+  toggleEmiFields();
   savedTxnFormState=null;
 }
 function captureBorrowFormState(){
@@ -913,7 +1228,7 @@ function removeSSItem(idx, zoneId){
   renderSSZone(zoneId);
 }
 
-function saveTxn(editId){
+function saveTxn(editId, rebuildPendingOnly=false){
   const type=document.getElementById('m-type').value;
   const pid=document.getElementById('m-person').value;
   if(!pid||pid==='__new__'){toast('Select a person');return;}
@@ -935,7 +1250,43 @@ function saveTxn(editId){
     const feeFlat=parseFloat(document.getElementById('m-fee-flat').value)||0;
     const feeOnCharged=(charged*(feePct/100));
     const gross=charged+feeOnCharged+feeFlat+(feeOnCharged*(feeGstOnFeePct/100))+(feeFlat*(feeGstOnFlatPct/100));
-    obj={type:'given',chargedAmount:charged,settlementAmount:settle||gross,cardId:document.getElementById('m-card').value||null,feePct,feeGstOnFeePct,feeGstOnFlatPct,feeFlat};
+    const isEmi=!!document.getElementById('m-is-emi')?.checked;
+    obj={type:'given',chargedAmount:charged,settlementAmount:settle||gross,cardId:document.getElementById('m-card').value||null,feePct,feeGstOnFeePct,feeGstOnFlatPct,feeFlat,isEmi:false};
+    if(isEmi){
+      const emiTenureValue=Math.max(1, Math.floor(parseFloat(document.getElementById('m-emi-tenure')?.value)||0));
+      const emiAnnualRatePct=Math.max(0, parseFloat(document.getElementById('m-emi-rate')?.value)||0);
+      const emiTenureUnit=(document.getElementById('m-emi-tenure-unit')?.value||'months');
+      const emiStartDate=document.getElementById('m-emi-start')?.value||date;
+      if(!emiTenureValue||!emiStartDate){toast('Please fill EMI tenure and start date');return;}
+      const emiPlan=computeEmiPlan({
+        principal:charged,
+        annualRatePct:emiAnnualRatePct,
+        tenureValue:emiTenureValue,
+        tenureUnit:emiTenureUnit,
+        startDate:emiStartDate,
+        processingFee:parseFloat(document.getElementById('m-emi-proc-fee')?.value)||0,
+        processingFeeGstPct:parseFloat(document.getElementById('m-emi-proc-gst')?.value)||0,
+        interestGstPct:parseFloat(document.getElementById('m-emi-interest-gst')?.value)||0
+      });
+      obj={
+        ...obj,
+        isEmi:true,
+        emiAnnualRatePct,
+        emiTenureValue,
+        emiTenureUnit,
+        emiStartDate:emiPlan.startDate,
+        emiEndDate:emiPlan.endDate,
+        emiProcessingFee:emiPlan.processingFee,
+        emiProcessingFeeGstPct:emiPlan.processingFeeGstPct,
+        emiInterestGstPct:emiPlan.interestGstPct,
+        emiProcessingFeeGst:emiPlan.processingFeeGst,
+        emiTotalInterest:emiPlan.totalInterest,
+        emiTotalInterestGst:emiPlan.interestGst,
+        emiMonthlyAmount:emiPlan.monthlyBase,
+        emiFirstInstallmentAmount:emiPlan.firstInstallmentAmount,
+        emiTotalRecoverable:emiPlan.overallTotal
+      };
+    }
   } else {
     const amt=parseFloat(document.getElementById('m-recv-amt').value);
     if(!amt){toast('Enter received amount');return;}
@@ -957,18 +1308,65 @@ function saveTxn(editId){
     if(old?.screenshots){obj.screenshots=old.screenshots;obj.screenshot=old.screenshot;obj.screenshotName=old.screenshotName;}
     else if(old?.screenshot){obj.screenshot=old.screenshot;obj.screenshotName=old.screenshotName;}
   }
+  if(type==='given'){
+    const existingEmi=DB.emiSchedules.filter(p=>p.txnId===obj.id);
+    const hasSettledEmi=existingEmi.some(p=>p.settled||((p.receivedAmount||0)>0));
+    if(hasSettledEmi && !obj.isEmi){
+      toast('Cannot disable EMI after receiving EMI repayments');
+      return;
+    }
+  }
   const txns=DB.transactions;
   if(editId){const i=txns.findIndex(t=>t.id===editId);if(i>-1)txns[i]=obj;}else txns.push(obj);
   DB.transactions=txns;pendingSS=null;pendingSSName=null;pendingSSList=[];clearUploadList('m-ss-zone');
+  if(type==='given'){
+    const allSchedules=DB.emiSchedules.slice();
+    const existingEmi=allSchedules.filter(p=>p.txnId===obj.id);
+    const hasSettledEmi=existingEmi.some(p=>p.settled||((p.receivedAmount||0)>0));
+    if(rebuildPendingOnly && obj.isEmi && editId){
+      const preview=previewPendingEmiRebuild(obj);
+      const ok=confirm(`Rebuild pending EMI schedule?\n\nSettled installments kept: ${preview.settledCount}\nPending installments to rebuild: ${preview.pendingCount}\nNew total installments: ${preview.totalCount}`);
+      if(!ok){toast('Rebuild cancelled');return;}
+    }
+    if(hasSettledEmi && obj.isEmi && editId){
+      const rebuilt=rebuildPendingEmiScheduleForTxn(obj);
+      if(!rebuilt.ok){toast(rebuilt.message);return;}
+      if(rebuildPendingOnly){
+        closeModal();
+        refreshCurrentPage();
+        toast(`Pending EMI rebuilt (${rebuilt.pendingCount}) ✓`);
+        return;
+      }
+    } else {
+      const filtered=allSchedules.filter(p=>p.txnId!==obj.id);
+      if(obj.isEmi){
+        const emiPlan=computeEmiPlan({
+          principal:obj.chargedAmount||0,
+          annualRatePct:obj.emiAnnualRatePct||0,
+          tenureValue:obj.emiTenureValue||1,
+          tenureUnit:obj.emiTenureUnit||'months',
+          startDate:obj.emiStartDate||obj.date||today(),
+          processingFee:obj.emiProcessingFee||0,
+          processingFeeGstPct:obj.emiProcessingFeeGstPct||0,
+          interestGstPct:obj.emiInterestGstPct||0
+        });
+        DB.emiSchedules=[...filtered,...buildEmiScheduleEntries(obj.id,emiPlan)];
+      } else {
+        DB.emiSchedules=filtered;
+      }
+    }
+  }
+  updateTxnSettlementStatus(obj.id);
   closeModal();
   refreshCurrentPage();
-  toast(editId?'Updated ✓':'Saved ✓');
+  toast(rebuildPendingOnly?'Pending EMI rebuilt ✓':(editId?'Updated ✓':'Saved ✓'));
 }
 
 function deleteTxn(id){
   if(!confirm('Delete transaction?'))return;
   DB.transactions=DB.transactions.filter(t=>t.id!==id);
   DB.payments=DB.payments.filter(p=>p.txnId!==id);
+  DB.emiSchedules=DB.emiSchedules.filter(s=>s.txnId!==id);
   closeModal();
   if(currentPage==='person-detail')renderPersonDetail(currentPersonId);
   else renderDashboard();
@@ -979,7 +1377,9 @@ function openTxnDetail(id, preferredTab=null){
   const t=DB.transactions.find(x=>x.id===id);if(!t)return;
   currentTxnDetailId=id;
   const p=DB.people.find(x=>x.id===t.personId)||{name:'Unknown',phone:''};
-  const payments=DB.payments.filter(pm=>pm.txnId===id).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const payments=DB.payments.filter(pm=>pm.txnId===id).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const emiSchedules=getTxnEmiSchedules(id);
+  const manualPayments=payments.filter(pm=>!pm.sourceEmiScheduleId);
   const refunds=DB.refunds.filter(r=>r.txnId===id).sort((a,b)=>new Date(a.date)-new Date(b.date));
   const settle=getTxnNetSettlement(t);
   const paid=payments.reduce((s,pm)=>s+(pm.amount||0),0);
@@ -1009,6 +1409,7 @@ function openTxnDetail(id, preferredTab=null){
     <div id="td-main" class="detail-tab-content ${activeTab==='td-main'?'active':''}">
       ${renderTxnCard(t)}
       <div class="card-sm mt8 fs12 muted">${fmt(charged)} + Fee ${fmt(feeOnCharged)} + Flat ${fmt(flat)} + GST(Fee) ${fmt(gstOnFee)} + GST(Flat) ${fmt(gstOnFlat)} = <b>${fmt(gross)}</b></div>
+      ${t.isEmi?`<div class="card-sm mt8 fs12 muted">EMI ${t.emiTenureValue||'-'} ${escHtml(t.emiTenureUnit||'months')} @ ${t.emiAnnualRatePct||0}% p.a · ${t.emiStartDate||'-'} to ${t.emiEndDate||'-'} · First ${fmt(t.emiFirstInstallmentAmount||0)}</div>`:''}
       <div class="card-sm mt8 fs12 muted">Paid ${fmt(paid)} · Refunded ${fmt(totalRefunded)} · Final Due ${fmt(remaining)}</div>
       <div class="btn-row mt8">
         <button class="btn btn-ghost" onclick="openTransactionView('${id}')">👁️ View Full Details</button>
@@ -1019,10 +1420,15 @@ function openTxnDetail(id, preferredTab=null){
     <div id="td-pay" class="detail-tab-content ${activeTab==='td-pay'?'active':''}">
       ${isGiven?`
       <div class="timeline" id="tl-${id}">
-        ${payments.length?payments.map(pm=>`
+        ${t.isEmi&&emiSchedules.length?emiSchedules.map(pm=>`
+          <div class="tl-item"><div class="tl-dot"></div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="tl-date">${pm.date} · EMI ${pm.installmentNo||'-'}/${pm.totalInstallments||'-'}</div><div class="tl-amt">${pm.settled?`+${fmt(pm.receivedAmount||0)}`:`Due ${fmt(pm.expectedAmount||0)}`}</div>${pm.notes?`<div class="tl-meta">${escHtml(pm.notes)}</div>`:''}${!pm.settled?`<div class="tl-meta">Not yet received</div>`:''}</div>${!pm.settled?`<button class="btn btn-primary btn-sm" onclick="openSettleEmiPayment('${pm.id}','${id}')">Mark Received</button>`:`<button class="btn btn-ghost btn-sm" onclick="openPaymentView('${pm.paymentId||''}','${id}')">View</button>`}</div>
+          </div>`).join(''):''}
+        ${manualPayments.length?manualPayments.map(pm=>`
           <div class="tl-item"><div class="tl-dot"></div>
             <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div class="tl-date">${pm.date} · ${escHtml(pm.modeOther||pm.mode||'Cash')}</div><div class="tl-amt">+${fmt(pm.amount)}</div>${pm.notes?`<div class="tl-meta">${escHtml(pm.notes)}</div>`:''}</div><button class="btn btn-ghost btn-sm" onclick="openPaymentView('${pm.id}','${id}')">View</button></div>
-          </div>`).join(''):'<div class="muted fs12">No repayments yet</div>'}
+          </div>`).join(''):''}
+        ${(!t.isEmi && !payments.length) || (t.isEmi && !emiSchedules.length && !manualPayments.length) ? '<div class="muted fs12">No repayments yet</div>' : ''}
       </div>
       <div class="flex-between mt8"><span class="fs12 muted">Remaining: <span class="fw6 red">${fmt(remaining)}</span></span>${remaining>0?`<button class="btn btn-primary btn-sm" onclick="openAddPayment('${id}')">＋ Add Payment</button>`:'<span class="badge settled">Settled</span>'}</div>
       `:'<div class="muted fs12">Repayment tracking is available for lent transactions.</div>'}
@@ -1103,14 +1509,7 @@ function savePayment(txnId, editPaymentId=''){
     if(i>-1) payments[i]=pm;
   } else payments.push(pm);
   DB.payments=payments;
-  const txn=DB.transactions.find(t=>t.id===txnId);
-  if(txn){
-    const settle=getTxnNetSettlement(txn);
-    const totalPaid=payments.filter(p=>p.txnId===txnId).reduce((s,p)=>s+(p.amount||0),0);
-    const txns=DB.transactions;
-    const i=txns.findIndex(t=>t.id===txnId);
-    if(i>-1){txns[i].status=totalPaid>=settle?'settled':totalPaid>0?'partial':'pending';DB.transactions=txns;}
-  }
+  updateTxnSettlementStatus(txnId);
   clearUploadList('pm-ss-zone');
   toast(editPaymentId?'Payment updated ✓':'Payment recorded ✓');
   openTxnDetail(txnId,'td-pay');
@@ -1119,18 +1518,73 @@ function savePayment(txnId, editPaymentId=''){
 function deletePayment(pmId, txnId) {
   if(!confirm('Delete this payment record?'))return;
   DB.payments=DB.payments.filter(p=>p.id!==pmId);
-  // Update transaction status
-  const txn=DB.transactions.find(t=>t.id===txnId);
-  if(txn){
-    const settle=getTxnNetSettlement(txn);
-    const totalPaid=DB.payments.filter(p=>p.txnId===txnId).reduce((s,p)=>s+(p.amount||0),0);
-    const txns=DB.transactions;
-    const i=txns.findIndex(t=>t.id===txnId);
-    if(i>-1){txns[i].status=totalPaid>=settle?'settled':totalPaid>0?'partial':'pending';DB.transactions=txns;}
-  }
+  updateTxnSettlementStatus(txnId);
   closeModal();
   openTxnDetail(txnId,'td-pay'); // Reopen to same tab
   toast('Payment deleted');
+}
+function openSettleEmiPayment(paymentId, txnId){
+  const pm=DB.emiSchedules.find(p=>p.id===paymentId&&p.txnId===txnId);
+  if(!pm) return;
+  const modes=getModes();
+  const modeOpts=modes.map(m=>`<option value="${m}" ${m==='UPI'?'selected':''}>${escHtml(m)}</option>`).join('');
+  openModal(`
+    <div class="modal-title">Confirm EMI Received</div>
+    <div class="field"><label>Expected Amount</label><div class="card-sm fs12">${fmt(pm.expectedAmount||0)} · Installment ${pm.installmentNo||'-'}/${pm.totalInstallments||'-'}</div></div>
+    <div class="field"><label>Received Amount ₹ *</label><input id="emi-rx-amt" type="number" inputmode="decimal" value="${pm.expectedAmount||''}" placeholder="0.00"/></div>
+    <div class="field-row">
+      <div class="field"><label>Received Date *</label><input id="emi-rx-date" type="date" value="${today()}"/></div>
+      <div class="field"><label>Mode</label><select id="emi-rx-mode">${modeOpts}</select></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="emi-rx-notes" style="min-height:52px">Received against EMI installment ${pm.installmentNo||''}/${pm.totalInstallments||''}</textarea></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="openTxnDetail('${txnId}','td-pay')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEmiPaymentReceived('${paymentId}','${txnId}')">Confirm Received</button>
+    </div>
+  `);
+}
+function confirmEmiPaymentReceived(paymentId, txnId){
+  const amt=parseFloat(document.getElementById('emi-rx-amt')?.value);
+  const date=document.getElementById('emi-rx-date')?.value||today();
+  if(!amt||amt<=0){toast('Enter valid received amount');return;}
+  const mode=document.getElementById('emi-rx-mode')?.value||'UPI';
+  const notes=document.getElementById('emi-rx-notes')?.value?.trim()||'';
+  const schedules=DB.emiSchedules.slice();
+  const i=schedules.findIndex(p=>p.id===paymentId&&p.txnId===txnId);
+  if(i<0){toast('EMI entry not found');return;}
+  const existingPaymentId=schedules[i].paymentId||null;
+  const payments=DB.payments.slice();
+  const paymentPayload={
+    id:existingPaymentId||uid(),
+    txnId,
+    amount:amt,
+    date,
+    mode,
+    modeOther:'',
+    notes,
+    sourceEmiScheduleId:paymentId
+  };
+  if(existingPaymentId){
+    const pIdx=payments.findIndex(p=>p.id===existingPaymentId);
+    if(pIdx>-1) payments[pIdx]={...payments[pIdx],...paymentPayload};
+    else payments.push(paymentPayload);
+  } else {
+    payments.push(paymentPayload);
+  }
+  schedules[i]={
+    ...schedules[i],
+    mode,
+    notes,
+    settled:true,
+    receivedAmount:amt,
+    receivedDate:date,
+    paymentId:paymentPayload.id
+  };
+  DB.payments=payments;
+  DB.emiSchedules=schedules;
+  updateTxnSettlementStatus(txnId);
+  toast('EMI repayment confirmed ✓');
+  openTxnDetail(txnId,'td-pay');
 }
 
 // ═══════════════════════════════════════════════
@@ -1946,7 +2400,7 @@ async function exportData(){
   toast(result==='shared'?'Backup shared ✓':'Exported (images excluded for size)');
 }
 function hasAnyStoredData(){
-  return (DB.people.length+DB.cards.length+DB.transactions.length+DB.payments.length+DB.borrowings.length+DB.bpayments.length+DB.refunds.length)>0;
+  return (DB.people.length+DB.cards.length+DB.transactions.length+DB.payments.length+DB.emiSchedules.length+DB.borrowings.length+DB.bpayments.length+DB.refunds.length)>0;
 }
 function ensureUpgradeSafetySnapshot(){
   const prev = LS.g(APP_VERSION_KEY);
@@ -1971,21 +2425,22 @@ function buildBackupData(includeImages=false){
       cards: DB.cards,
       transactions: DB.transactions,
       payments: DB.payments,
+      emiSchedules: DB.emiSchedules,
       borrowings: DB.borrowings,
       bpayments: DB.bpayments,
       refunds: DB.refunds,
       reportViews: DB.reportViews,
       settings: DB.settings,
       exportedAt: new Date().toISOString(),
-      version: 3,
+      version: 4,
       includesImages: true
     };
   }
   return {
     people:DB.people,cards:DB.cards,transactions:DB.transactions.map(({screenshot,...r})=>r),
-    payments:DB.payments.map(({proof,...r})=>r),borrowings:DB.borrowings.map(({screenshot,...r})=>r),
+    payments:DB.payments.map(({proof,...r})=>r),emiSchedules:DB.emiSchedules,borrowings:DB.borrowings.map(({screenshot,...r})=>r),
     bpayments:DB.bpayments.map(({proof,...r})=>r),refunds: DB.refunds, reportViews: DB.reportViews,
-    settings:DB.settings,exportedAt:new Date().toISOString(),version:3,includesImages:false
+    settings:DB.settings,exportedAt:new Date().toISOString(),version:4,includesImages:false
   };
 }
 function downloadBackupFile(data, filename){
@@ -2102,6 +2557,7 @@ function applyImportedBackupData(d){
   if(d.cards)DB.cards=d.cards;
   if(d.transactions)DB.transactions=d.transactions;
   if(d.payments)DB.payments=d.payments;
+  if(d.emiSchedules)DB.emiSchedules=d.emiSchedules;
   if(d.borrowings)DB.borrowings=d.borrowings;
   if(d.bpayments)DB.bpayments=d.bpayments;
   if(d.refunds)DB.refunds=d.refunds;
@@ -2270,6 +2726,21 @@ function runDataMigrations(){
     next.feeGstOnFeePct = toNum((t.feeGstOnFeePct ?? t.feeGstPct));
     next.feeGstOnFlatPct = toNum((t.feeGstOnFlatPct ?? t.feeGstPct));
     next.feeFlat = toNum(t.feeFlat);
+    next.isEmi = !!t.isEmi;
+    next.emiAnnualRatePct = toNum(t.emiAnnualRatePct);
+    next.emiTenureValue = Math.max(0, Math.floor(toNum(t.emiTenureValue)));
+    next.emiTenureUnit = t.emiTenureUnit === 'years' ? 'years' : 'months';
+    next.emiStartDate = normalizeDate(t.emiStartDate);
+    next.emiEndDate = normalizeDate(t.emiEndDate);
+    next.emiProcessingFee = toNum(t.emiProcessingFee);
+    next.emiProcessingFeeGstPct = toNum(t.emiProcessingFeeGstPct);
+    next.emiInterestGstPct = toNum(t.emiInterestGstPct);
+    next.emiProcessingFeeGst = toNum(t.emiProcessingFeeGst);
+    next.emiTotalInterest = toNum(t.emiTotalInterest);
+    next.emiTotalInterestGst = toNum(t.emiTotalInterestGst);
+    next.emiMonthlyAmount = toNum(t.emiMonthlyAmount);
+    next.emiFirstInstallmentAmount = toNum(t.emiFirstInstallmentAmount);
+    next.emiTotalRecoverable = toNum(t.emiTotalRecoverable);
     // Backfill records created before fee-aware settlement default.
     if (next.type === 'given') {
       const feeOnCharged = next.chargedAmount * (next.feePct / 100);
@@ -2286,11 +2757,71 @@ function runDataMigrations(){
     return next;
   });
 
-  const payments = DB.payments.map((p) => ({
+  const legacyPayments = DB.payments.map((p) => ({
     ...p,
     amount: toNum(p.amount),
+    expectedAmount: toNum(p.expectedAmount),
+    settledAmount: toNum(p.settledAmount),
     date: normalizeDate(p.date),
+    settled: !!p.settled,
+    isEmiSchedule: !!p.isEmiSchedule
   }));
+  const schedules = DB.emiSchedules.map((s) => ({
+    ...s,
+    expectedAmount: toNum(s.expectedAmount),
+    receivedAmount: toNum(s.receivedAmount),
+    date: normalizeDate(s.date),
+    receivedDate: s.receivedDate ? normalizeDate(s.receivedDate) : null,
+    settled: !!s.settled
+  }));
+  const payments = legacyPayments
+    .filter((p) => !p.isEmiSchedule)
+    .map((p) => ({
+      ...p,
+      sourceEmiScheduleId: p.sourceEmiScheduleId || null
+    }));
+
+  // Migrate older EMI schedule records stored inside payments into dedicated emiSchedules.
+  const migratedSchedules = [];
+  const migratedPayments = [];
+  legacyPayments
+    .filter((p) => p.isEmiSchedule)
+    .forEach((p) => {
+      const scheduleId = p.id || uid();
+      const settled = !!p.settled || toNum(p.amount) > 0;
+      let paymentId = p.paymentId || null;
+      if (settled) {
+        const payId = uid();
+        paymentId = payId;
+        migratedPayments.push({
+          id: payId,
+          txnId: p.txnId,
+          amount: toNum(p.amount || p.settledAmount || 0),
+          date: normalizeDate(p.date),
+          mode: p.mode || 'EMI',
+          modeOther: p.modeOther || '',
+          notes: p.notes || `Received against EMI installment ${p.installmentNo||''}/${p.totalInstallments||''}`,
+          sourceEmiScheduleId: scheduleId
+        });
+      }
+      migratedSchedules.push({
+        id: scheduleId,
+        txnId: p.txnId,
+        expectedAmount: toNum(p.expectedAmount || p.amount),
+        date: normalizeDate(p.date),
+        settled,
+        receivedAmount: settled ? toNum(p.amount || p.settledAmount || 0) : 0,
+        receivedDate: settled ? normalizeDate(p.settledDate || p.date) : null,
+        paymentId,
+        installmentNo: Math.max(0, Math.floor(toNum(p.installmentNo))),
+        totalInstallments: Math.max(0, Math.floor(toNum(p.totalInstallments))),
+        mode: p.mode || 'EMI',
+        notes: p.notes || '',
+        generatedAt: p.generatedAt || today()
+      });
+    });
+  const allSchedules = [...schedules, ...migratedSchedules];
+  const allPayments = [...payments, ...migratedPayments];
 
   const borrowings = DB.borrowings.map((b) => ({
     ...b,
@@ -2313,7 +2844,8 @@ function runDataMigrations(){
   const cleanViews = DB.reportViews.filter((v) => v && v.id && v.name);
 
   if (changed || txns.length !== DB.transactions.length) DB.transactions = txns;
-  DB.payments = payments;
+  DB.payments = allPayments;
+  DB.emiSchedules = allSchedules;
   DB.borrowings = borrowings;
   DB.bpayments = bpayments;
   DB.refunds = refunds;
@@ -2326,6 +2858,7 @@ function runStorageUpgradeMigrations(){
     cards: LS.g('ld2_cards'),
     transactions: LS.g('ld2_txns'),
     payments: LS.g('ld2_payments'),
+    emiSchedules: LS.g('ld2_emi_schedules'),
     borrowings: LS.g('ld2_borrows'),
     bpayments: LS.g('ld2_bpayments'),
     pin: LS.g('ld2_pin'),
@@ -2338,6 +2871,7 @@ function runStorageUpgradeMigrations(){
     cards: ['ld_cards','lenden_cards','ldv2_cards'],
     transactions: ['ld_txns','ld_transactions','lenden_txns','ldv2_txns'],
     payments: ['ld_payments','lenden_payments','ldv2_payments'],
+    emiSchedules: ['ld2_emi_schedules','ld_emi_schedules','lenden_emi_schedules','ldv2_emi_schedules'],
     borrowings: ['ld_borrows','ld_borrowings','lenden_borrows','ldv2_borrows'],
     bpayments: ['ld_bpayments','lenden_bpayments','ldv2_bpayments'],
     pin: ['ld_pin','lenden_pin','ldv2_pin'],
@@ -2350,6 +2884,7 @@ function runStorageUpgradeMigrations(){
     cards: 'ld2_cards',
     transactions: 'ld2_txns',
     payments: 'ld2_payments',
+    emiSchedules: 'ld2_emi_schedules',
     borrowings: 'ld2_borrows',
     bpayments: 'ld2_bpayments',
     pin: 'ld2_pin',
@@ -2379,6 +2914,7 @@ function runStorageUpgradeMigrations(){
         if(Array.isArray(d.cards) && !LS.g('ld2_cards')) LS.s('ld2_cards', d.cards);
         if(Array.isArray(d.transactions) && !LS.g('ld2_txns')) LS.s('ld2_txns', d.transactions);
         if(Array.isArray(d.payments) && !LS.g('ld2_payments')) LS.s('ld2_payments', d.payments);
+        if(Array.isArray(d.emiSchedules) && !LS.g('ld2_emi_schedules')) LS.s('ld2_emi_schedules', d.emiSchedules);
         if(Array.isArray(d.borrowings) && !LS.g('ld2_borrows')) LS.s('ld2_borrows', d.borrowings);
         if(Array.isArray(d.bpayments) && !LS.g('ld2_bpayments')) LS.s('ld2_bpayments', d.bpayments);
         if(d.pin && !LS.g('ld2_pin')) LS.s('ld2_pin', d.pin);
@@ -2529,6 +3065,7 @@ function openTransactionView(txnId){
       <div class="mt4"><b>Date:</b> ${escHtml(t.date||'')}</div>
       <div class="mt4"><b>Category:</b> ${escHtml(t.categoryOther||t.category||'Other')}</div>
       <div class="mt4"><b>Mode:</b> ${escHtml(t.modeOther||t.mode||'')}</div>
+      ${t.isEmi?`<div class="mt4"><b>EMI:</b> ${t.emiTenureValue||'-'} ${escHtml(t.emiTenureUnit||'months')} @ ${t.emiAnnualRatePct||0}% p.a (${t.emiStartDate||'-'} to ${t.emiEndDate||'-'})</div>`:''}
       <div class="mt4"><b>Card:</b> ${escHtml(card?`${card.nickname} ····${card.last4}`:'None')}</div>
       <div class="mt8"><b>Calculation:</b> ${fmt(charged)} + ${fmt(feeOnCharged)} + ${fmt(flat)} + GST(Fee) ${fmt(gstOnFee)} + GST(Flat) ${fmt(gstOnFlat)} = ${fmt(gross)}</div>
       <div class="mt4"><b>Refunded:</b> ${fmt(refunded)} · <b>Paid:</b> ${fmt(paid)} · <b>Due:</b> ${fmt(due)}</div>
@@ -2545,6 +3082,7 @@ function openTransactionView(txnId){
 
 function openPaymentView(pmId, txnId){
   const pm=DB.payments.find(p=>p.id===pmId); if(!pm) return;
+  const emiMeta=pm.sourceEmiScheduleId ? DB.emiSchedules.find(s=>s.id===pm.sourceEmiScheduleId) : null;
   const proofs=pm.proofs||(pm.proof?[{data:pm.proof,name:pm.proofName||'proof'}]:[]);
   openModal(`
     <div class="modal-header">
@@ -2553,6 +3091,7 @@ function openPaymentView(pmId, txnId){
     </div>
     <div class="card-sm fs12">
       <div><b>Amount:</b> ${fmt(pm.amount)}</div>
+      ${emiMeta?`<div class="mt4"><b>Expected:</b> ${fmt(emiMeta.expectedAmount||0)}</div><div class="mt4"><b>Installment:</b> ${emiMeta.installmentNo||'-'}/${emiMeta.totalInstallments||'-'}</div><div class="mt4"><b>Status:</b> received (EMI)</div>`:''}
       <div class="mt4"><b>Date:</b> ${escHtml(pm.date||'')}</div>
       <div class="mt4"><b>Mode:</b> ${escHtml(pm.modeOther||pm.mode||'')}</div>
       ${pm.notes?`<div class="mt4"><b>Notes:</b> ${escHtml(pm.notes)}</div>`:''}
